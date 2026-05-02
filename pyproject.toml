@@ -1,0 +1,16 @@
+[project]
+name = "qr_attendance"
+version = "1.0.0"
+description = "QR Attendance System"
+
+[tool.flet]
+org = "com.yourname"
+product = "QR Attendance"
+company = "Your Company"
+
+[tool.flet.app]
+path = "main.py"
+
+[tool.flet.android]
+package = "com.yourname.qrattendance"
+permissions = ["CAMERA", "INTERNET"]
