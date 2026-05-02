@@ -1,31 +1,33 @@
-name: Build APK
+name: Build Android APK
 
 on:
   push:
-    branches: ["main"]
+    branches: [ main ] # سيعمل تلقائياً عند الدفع لفرع main
+  workflow_dispatch: # يسمح لك بتشغيل البناء يدوياً من واجهة GitHub
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
-      - name: Install Flet
+      - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install flet==0.84.0
+          python -m pip install --upgrade pip
+          pip install flet qrcode pillow
 
-      - name: Build APK (split per ABI)
-        run: |
-          flet build apk --yes --split-per-abi --clear-cache
+      - name: Build APK with Flet
+        run: flet build apk src/main.py --project-name "QRAttendance" --org "com.omarkhalaqi.qr" --app-name "QR Attendance"
 
-      - name: Upload APKs
-        uses: actions/upload-artifact@v4
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: qr-attendance-apks
-          path: build/apk/*.apk
+          name: QRAttendance-APK
+          path: build/apk/**/*.apk
