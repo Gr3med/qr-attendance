@@ -1,10 +1,7 @@
 [project]
 name = "qr_attendance"
-version = "1.1.0"
-dependencies = [
-  "flet==0.22.0",
-  "flet-flutter==0.22.0"
-]
+version = "1.0.0"
+dependencies = ["flet"]
 
 [tool.flet]
 org = "com.yourname"
@@ -15,4 +12,3 @@ path = "src"
 
 [tool.flet.android]
 package = "com.yourname.qrattendance"
-permissions = ["CAMERA", "INTERNET"]
