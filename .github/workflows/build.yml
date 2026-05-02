@@ -2,39 +2,51 @@ name: Build APK
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: 🐍 Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ✅ تحديث pip (مهم جدًا)
-      - name: ⬆️ Upgrade pip
-        run: python -m pip install --upgrade pip
+      - name: ⬆️ Upgrade pip + wheel
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
 
-      # ✅ تثبيت أدوات البناء (هذا كان ناقص)
-      - name: 🛠 Install system dependencies
+      # أدوات النظام اللازمة لو اضطُر للبناء
+      - name: 🛠 Install system libs
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev
 
-      # ✅ تثبيت Flutter
+      # تثبيت Flutter (مطلوب لـ flet build)
       - name: 🚀 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
 
-      # ✅ تثبيت المكتبات
-      - name: 📦 Install dependencies
+      # تثبيت الحزم مع إجبار استخدام wheels جاهزة (تجنّب build من المصدر)
+      - name: 📦 Install deps (prefer wheels)
+        run: |
+          pip install flet
+          pip install --only-binary=:all: -r requirements.txt
+
+      # بناء APK
+      - name: 🔨 Build APK
+        run: flet build apk --verbose
+
+      - name: 📤 Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: qr-attendance-apk
+          path: build/apk/*.apk      - name: 📦 Install dependencies
         run: |
           pip install flet
           pip install -r requirements.txt
