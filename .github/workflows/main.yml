@@ -5,15 +5,13 @@ on:
     branches: ["main"]
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -22,12 +20,12 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install flet==0.84.0
 
-      - name: Build APK
+      - name: Build APK (split per ABI)
         run: |
-          flet build apk --yes --permissions camera --clear-cache
+          flet build apk --yes --split-per-abi --clear-cache
 
-      - name: Upload APK
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: qr-attendance-apk
+          name: qr-attendance-apks
           path: build/apk/*.apk
