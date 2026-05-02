@@ -10,11 +10,15 @@ dependencies = [
 ]
 
 [tool.flet]
-org = "com.yourname"
+org = "com.qr.attendance"
 product = "QR Attendance"
 
 [tool.flet.app]
 path = "src"
 
+[tool.flet.android]
+package = "com.qr.attendance"
+
 [tool.flet.android.permission]
 "android.permission.CAMERA" = true
+"android.permission.READ_EXTERNAL_STORAGE" = true
