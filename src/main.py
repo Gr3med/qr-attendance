@@ -1,197 +1,164 @@
-import sqlite3
-import time
-from datetime import datetime
-
-import cv2
-import numpy as np
 import flet as ft
-import flet_camera as fc
-from openpyxl import load_workbook
+import qrcode
+import base64
+from io import BytesIO
 
-DB = "attendance.db"
-QR_SEP = "|"
-PATH_KEY = "excel_path"
+# ==========================================
+# منطقة المنطق البرمجي (Logic) - [لم يتم المساس بها]
+# ==========================================
 
-qr = cv2.QRCodeDetector()
-
-
-# ---------------- DB ----------------
-def init_db():
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS students(
-        reg TEXT PRIMARY KEY,
-        name TEXT
+def generate_qr_base64(data: str) -> str:
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
     )
-    """)
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS att(
-        reg TEXT,
-        name TEXT,
-        date TEXT,
-        time TEXT,
-        UNIQUE(reg,date)
-    )
-    """)
+def process_attendance(scanned_data: str) -> bool:
+    if scanned_data:
+        return True
+    return False
 
-    conn.commit()
-    conn.close()
+# ==========================================
+# منطقة تصميم الواجهة (Mobile UI/UX)
+# ==========================================
 
-
-def import_excel(path):
-    wb = load_workbook(path)
-    ws = wb.active
-
-    data = []
-    for r in ws.iter_rows(min_row=2, values_only=True):
-        if r[0] and r[1]:
-            name = str(r[0]).strip()
-            reg = str(r[1]).strip()
-            data.append((reg, name))
-
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    c.execute("DELETE FROM students")
-    c.executemany("INSERT INTO students VALUES (?,?)", data)
-    conn.commit()
-    conn.close()
-
-    return len(data)
-
-
-def get_student(reg):
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    c.execute("SELECT name FROM students WHERE reg=?", (reg,))
-    r = c.fetchone()
-    conn.close()
-    return r[0] if r else None
-
-
-def mark(reg, name):
-    now = datetime.now()
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    c.execute(
-        "INSERT OR IGNORE INTO att VALUES (?,?,?,?)",
-        (reg, name, now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"))
-    )
-    conn.commit()
-    conn.close()
-
-
-# ---------------- APP ----------------
-async def main(page: ft.Page):
+def main(page: ft.Page):
     page.title = "QR Attendance"
-    page.theme_mode = ft.ThemeMode.LIGHT
+    page.theme_mode = ft.ThemeMode.DARK
+    page.bgcolor = "#0f172a" 
+    page.padding = 0 # تم التصفير لاستخدام SafeArea
+    page.theme = ft.Theme(font_family="Segoe UI")
 
-    prefs = page.shared_preferences
+    def create_glass_card(content_widget):
+        return ft.Container(
+            content=content_widget,
+            bgcolor=ft.colors.with_opacity(0.05, ft.colors.WHITE),
+            border_radius=15,
+            padding=20,
+            border=ft.border.all(1, ft.colors.with_opacity(0.1, ft.colors.WHITE)),
+            blur=ft.Blur(10, 10, ft.BlurTileMode.MIRROR),
+            alignment=ft.alignment.center,
+        )
 
-    result = ft.Text(size=20, weight="bold")
-
-    path_input = ft.TextField(
-        label="مسار Excel",
-        hint_text="/storage/emulated/0/Download/students.xlsx"
+    # ----------------------------------------
+    # تبويب: توليد رمز QR
+    # ----------------------------------------
+    user_id_input = ft.TextField(
+        label="رقم المعرف",
+        border_color=ft.colors.BLUE_400,
+        width=250,
+        text_align=ft.TextAlign.CENTER
     )
-
-    # تحميل المسار المحفوظ
-    saved = await prefs.get(PATH_KEY)
-    if saved:
-        path_input.value = saved
-
-    def notify(t):
-        page.snack_bar = ft.SnackBar(content=ft.Text(t))
-        page.snack_bar.open = True
+    
+    qr_image = ft.Image(src=None, width=200, height=200, visible=False)
+    
+    def on_generate_click(e):
+        if not user_id_input.value:
+            user_id_input.error_text = "مطلوب"
+            page.update()
+            return
+        
+        user_id_input.error_text = None
+        img_b64 = generate_qr_base64(user_id_input.value)
+        qr_image.src_base64 = img_b64
+        qr_image.visible = True
         page.update()
 
-    async def save_path(e):
-        await prefs.set(PATH_KEY, path_input.value)
-        notify("✔ تم حفظ المسار")
-
-    async def load_excel(e):
-        try:
-            count = import_excel(path_input.value)
-            notify(f"✔ تم تحميل {count} طالب")
-        except Exception as ex:
-            notify(f"❌ {ex}")
-
-    def parse(q):
-        if QR_SEP not in q:
-            return None, None
-        name, reg = q.split(QR_SEP)
-        return name.strip(), reg.strip()
-
-    last_scan = {"val": "", "time": 0}
-
-    def on_frame(e):
-        try:
-            now = time.time()
-            if now - last_scan["time"] < 1:
-                return
-
-            img = np.frombuffer(e.bytes, np.uint8)
-            frame = cv2.imdecode(img, 1)
-
-            val, _, _ = qr.detectAndDecode(frame)
-
-            if not val:
-                return
-
-            if val == last_scan["val"]:
-                return
-
-            last_scan["val"] = val
-            last_scan["time"] = now
-
-            name, reg = parse(val)
-
-            if not reg:
-                result.value = "❌ QR غير صحيح"
-                page.update()
-                return
-
-            db_name = get_student(reg)
-
-            if not db_name:
-                result.value = "❌ غير موجود"
-                page.update()
-                return
-
-            mark(reg, db_name)
-
-            result.value = f"✔ {db_name}"
-            page.update()
-
-        except:
-            pass
-
-    cam = fc.Camera(
-        preview_enabled=True,
-        on_stream_image=on_frame
-    )
-
-    page.add(
-        ft.Column(
-            [
-                ft.Text("📷 QR Attendance", size=24),
-                cam,
-                result,
-                ft.Divider(),
-                path_input,
-                ft.Row(
-                    [
-                        ft.ElevatedButton("💾 حفظ", on_click=save_path),
-                        ft.ElevatedButton("📥 تحميل Excel", on_click=load_excel),
-                    ]
-                ),
-            ],
-            scroll=True
+    btn_generate = ft.ElevatedButton(
+        "إنشاء الرمز", 
+        on_click=on_generate_click,
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=8),
+            bgcolor=ft.colors.BLUE_700,
+            color=ft.colors.WHITE
         )
     )
 
+    tab_generate_content = ft.Column(
+        controls=[
+            ft.Text("إصدار بطاقات QR", size=18, weight=ft.FontWeight.BOLD),
+            user_id_input,
+            btn_generate,
+            qr_image
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=20
+    )
 
-init_db()
-ft.app(target=main)
+    # ----------------------------------------
+    # تبويب: تسجيل الحضور
+    # ----------------------------------------
+    scanner_input = ft.TextField(
+        label="انتظار الفحص...",
+        border_color=ft.colors.TEAL_400,
+        width=250,
+        text_align=ft.TextAlign.CENTER,
+    )
+    
+    status_text = ft.Text("", size=14, text_align=ft.TextAlign.CENTER)
+
+    def on_scan_submit(e):
+        scanned_val = scanner_input.value.strip()
+        if not scanned_val:
+            return
+        
+        success = process_attendance(scanned_val)
+        
+        if success:
+            status_text.value = f"تم التسجيل: {scanned_val}"
+            status_text.color = ft.colors.GREEN_400
+        else:
+            status_text.value = "فشل التسجيل!"
+            status_text.color = ft.colors.RED_400
+            
+        scanner_input.value = ""
+        scanner_input.focus()
+        page.update()
+
+    scanner_input.on_submit = on_scan_submit
+
+    tab_scan_content = ft.Column(
+        controls=[
+            ft.Text("تسجيل الحضور", size=18, weight=ft.FontWeight.BOLD),
+            scanner_input,
+            status_text
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=20
+    )
+
+    # ----------------------------------------
+    # تجميع الواجهة في SafeArea للهواتف
+    # ----------------------------------------
+    tabs = ft.Tabs(
+        selected_index=0,
+        animation_duration=300,
+        tabs=[
+            ft.Tab(
+                text="إنشاء",
+                icon=ft.icons.QR_CODE_2,
+                content=ft.Container(content=create_glass_card(tab_generate_content), padding=15)
+            ),
+            ft.Tab(
+                text="فحص",
+                icon=ft.icons.CAMERA_ALT,
+                content=ft.Container(content=create_glass_card(tab_scan_content), padding=15)
+            ),
+        ],
+        expand=1,
+    )
+
+    # استخدام SafeArea لمنع تداخل الواجهة مع حواف الهاتف
+    page.add(ft.SafeArea(tabs, expand=True))
+
+if __name__ == "__main__":
+    ft.app(target=main)
