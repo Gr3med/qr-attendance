@@ -2,187 +2,231 @@ import flet as ft
 import sqlite3
 from datetime import datetime
 
-DB = "attendance.db"
+# Flutter widget wrapper (QR Scanner)
+from flet_flutter import FlutterControl
+from flet_flutter import MobileScanner  # uses camera for QR/Barcode
 
-# ---------- DATABASE ----------
+DB = "attendance.db"
+ADMIN_PASSWORD = "123456"
+
+
+# ---------- DB ----------
 def init_db():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-
     c.execute("""
-    CREATE TABLE IF NOT EXISTS students (
-        reg_no TEXT PRIMARY KEY,
-        name TEXT NOT NULL
-    )
+        CREATE TABLE IF NOT EXISTS students (
+            reg_no TEXT PRIMARY KEY,
+            name TEXT NOT NULL
+        )
     """)
-
     c.execute("""
-    CREATE TABLE IF NOT EXISTS attendance (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        reg_no TEXT,
-        date TEXT,
-        time TEXT
-    )
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reg_no TEXT,
+            date TEXT,
+            time TEXT
+        )
     """)
-
     conn.commit()
     conn.close()
 
-# ---------- DB HELPERS ----------
+
 def get_students():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-    c.execute("SELECT reg_no, name FROM students")
-    data = c.fetchall()
+    c.execute("SELECT reg_no, name FROM students ORDER BY reg_no")
+    rows = c.fetchall()
     conn.close()
-    return data
+    return rows
+
 
 def add_student(reg_no, name):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-    try:
-        c.execute("INSERT INTO students (reg_no, name) VALUES (?, ?)", (reg_no, name))
-        conn.commit()
-    except:
-        pass
+    c.execute("INSERT OR REPLACE INTO students (reg_no, name) VALUES (?,?)", (reg_no, name))
+    conn.commit()
     conn.close()
+
 
 def get_student(reg_no):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute("SELECT name FROM students WHERE reg_no=?", (reg_no,))
-    result = c.fetchone()
+    row = c.fetchone()
     conn.close()
-    return result
+    return row[0] if row else None
 
-def already_marked_today(reg_no):
+
+def marked_today(reg_no):
     today = datetime.now().strftime("%Y-%m-%d")
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-    c.execute("SELECT * FROM attendance WHERE reg_no=? AND date=?", (reg_no, today))
-    result = c.fetchone()
+    c.execute("SELECT 1 FROM attendance WHERE reg_no=? AND date=? LIMIT 1", (reg_no, today))
+    r = c.fetchone()
     conn.close()
-    return result is not None
+    return r is not None
+
 
 def mark_attendance(reg_no):
     now = datetime.now()
-    date = now.strftime("%Y-%m-%d")
-    time = now.strftime("%H:%M:%S")
-
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute(
         "INSERT INTO attendance (reg_no, date, time) VALUES (?, ?, ?)",
-        (reg_no, date, time)
+        (reg_no, now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"))
     )
     conn.commit()
     conn.close()
 
-# ---------- MAIN APP ----------
+
+# ---------- UI ----------
 def main(page: ft.Page):
-    page.title = "نظام حضور QR - رقم القيد"
-    page.scroll = "auto"
+    page.title = "QR Attendance"
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.padding = 0
 
-    output = ft.Text(size=18, weight="bold", color="green")
+    # Theme (simple modern look)
+    page.theme = ft.Theme(
+        color_scheme_seed=ft.colors.BLUE,
+        use_material3=True
+    )
 
-    # ---------- ADMIN ----------
-    name_input = ft.TextField(label="اسم الطالب", width=300)
-    reg_input = ft.TextField(label="رقم القيد (مثال: 246066)", width=300)
+    msg = ft.Text(size=16, weight=ft.FontWeight.BOLD)
 
-    student_list = ft.Column()
+    is_admin = False
+
+    # ---------- Admin UI ----------
+    reg_input = ft.TextField(label="رقم القيد", border_radius=12)
+    name_input = ft.TextField(label="اسم الطالب", border_radius=12)
+
+    students_list = ft.Column()
 
     def refresh_students():
-        student_list.controls.clear()
-        for s in get_students():
-            student_list.controls.append(
-                ft.Text(f"{s[0]} | {s[1]}")
+        students_list.controls.clear()
+        for reg, name in get_students():
+            students_list.controls.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Text(reg, weight="bold"),
+                        ft.Text(name)
+                    ], alignment="spaceBetween"),
+                    padding=10,
+                    border_radius=12,
+                    bgcolor=ft.colors.GREY_100
+                )
             )
         page.update()
 
     def add_student_click(e):
-        reg = reg_input.value.strip()
-        name = name_input.value.strip()
-
-        if not reg or not name:
-            output.value = "❌ أدخل الاسم ورقم القيد"
+        if not reg_input.value or not name_input.value:
+            msg.value = "أدخل البيانات"
             page.update()
             return
-
-        add_student(reg, name)
-
+        add_student(reg_input.value, name_input.value)
         reg_input.value = ""
         name_input.value = ""
-
-        output.value = "✔ تم إضافة الطالب"
+        msg.value = "تمت الإضافة"
         refresh_students()
 
     admin_view = ft.Column([
-        ft.Text("👨‍💼 لوحة الإدارة", size=22),
+        ft.Text("لوحة الإدارة", size=24, weight="bold"),
         reg_input,
         name_input,
-        ft.ElevatedButton("إضافة طالب", on_click=add_student_click),
+        ft.ElevatedButton("إضافة", on_click=add_student_click),
         ft.Divider(),
-        ft.Text("📋 قائمة الطلاب"),
-        student_list,
-        ft.ElevatedButton("➡️ الانتقال للحضور", on_click=lambda e: show_attendance())
+        students_list,
+        ft.ElevatedButton("⬅ رجوع", on_click=lambda e: show_attendance())
     ])
 
-    # ---------- ATTENDANCE ----------
-    scan_input = ft.TextField(label="أدخل QR (مثال: REG-246066)", width=300)
-
-    def handle_scan(e):
-        data = scan_input.value.strip()
+    # ---------- Scanner ----------
+    def on_scan(barcode):
+        data = barcode["rawValue"]
 
         if not data.startswith("REG-"):
-            output.value = "❌ QR غير صحيح"
+            msg.value = "QR غير صحيح"
             page.update()
             return
 
         reg_no = data.replace("REG-", "")
+        name = get_student(reg_no)
 
-        student = get_student(reg_no)
-
-        if not student:
-            output.value = "❌ الطالب غير موجود"
+        if not name:
+            msg.value = "الطالب غير موجود"
             page.update()
             return
 
-        name = student[0]
-
-        if already_marked_today(reg_no):
-            output.value = f"⚠️ {name} مسجل مسبقًا اليوم"
+        if marked_today(reg_no):
+            msg.value = f"{name} مسجل مسبقًا"
             page.update()
             return
 
         mark_attendance(reg_no)
-        output.value = f"✔ تم تسجيل حضور: {name}"
-
-        scan_input.value = ""
+        msg.value = f"✔ تم تسجيل: {name}"
         page.update()
 
-    attendance_view = ft.Column([
-        ft.Text("📷 تسجيل الحضور", size=22),
-        scan_input,
-        ft.ElevatedButton("تسجيل الحضور", on_click=handle_scan),
-        ft.ElevatedButton("⬅️ الرجوع للإدارة", on_click=lambda e: show_admin())
+    scanner = FlutterControl(
+        control=MobileScanner(
+            on_detect=on_scan,
+            fit="cover"
+        ),
+        expand=True
+    )
+
+    attendance_view = ft.Stack([
+        scanner,
+        ft.Container(
+            content=ft.Column([
+                ft.Text("وجّه الكاميرا نحو QR", color="white"),
+                ft.ElevatedButton("دخول الأدمن", on_click=lambda e: show_login())
+            ]),
+            alignment=ft.alignment.bottom_center,
+            padding=20
+        )
     ])
 
-    # ---------- NAVIGATION ----------
+    # ---------- Login ----------
+    password_input = ft.TextField(password=True, label="كلمة المرور")
+
+    def login(e):
+        nonlocal is_admin
+        if password_input.value == ADMIN_PASSWORD:
+            is_admin = True
+            show_admin()
+        else:
+            msg.value = "كلمة المرور خاطئة"
+            page.update()
+
+    login_view = ft.Column([
+        ft.Text("دخول الأدمن", size=22),
+        password_input,
+        ft.ElevatedButton("دخول", on_click=login),
+        ft.ElevatedButton("رجوع", on_click=lambda e: show_attendance())
+    ])
+
+    # ---------- Navigation ----------
     def show_admin():
+        if not is_admin:
+            show_login()
+            return
         page.controls.clear()
-        page.add(admin_view, output)
+        page.add(admin_view, msg)
         refresh_students()
+
+    def show_login():
+        page.controls.clear()
+        page.add(login_view, msg)
 
     def show_attendance():
         page.controls.clear()
-        page.add(attendance_view, output)
+        page.add(attendance_view, msg)
 
-    # ---------- START ----------
+    # start
     if len(get_students()) == 0:
         show_admin()
     else:
         show_attendance()
 
-# ---------- RUN ----------
+
 init_db()
 ft.app(target=main)
