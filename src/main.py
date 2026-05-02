@@ -1,164 +1,262 @@
 import flet as ft
 import qrcode
 import base64
+import csv
 from io import BytesIO
+from datetime import datetime
 
 # ==========================================
-# منطقة المنطق البرمجي (Logic) - [لم يتم المساس بها]
+# منطقة قواعد البيانات والمنطق البرمجي
 # ==========================================
+
+db_students = {}      
+db_attendance = []    
 
 def generate_qr_base64(data: str) -> str:
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
-    )
+    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
     qr.add_data(data)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
-    
     buffered = BytesIO()
     img.save(buffered, format="PNG")
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-def process_attendance(scanned_data: str) -> bool:
-    if scanned_data:
-        return True
-    return False
-
 # ==========================================
-# منطقة تصميم الواجهة (Mobile UI/UX)
+# منطقة واجهة المستخدم (Mobile UI/UX)
 # ==========================================
 
 def main(page: ft.Page):
-    page.title = "QR Attendance"
+    page.title = "نظام الحضور الذكي"
     page.theme_mode = ft.ThemeMode.DARK
-    page.bgcolor = "#0f172a" 
-    page.padding = 0 # تم التصفير لاستخدام SafeArea
+    page.bgcolor = "#0f172a"
+    page.padding = 0
     page.theme = ft.Theme(font_family="Segoe UI")
+
+    def show_snack_bar(msg, color):
+        page.overlay.append(
+            ft.SnackBar(content=ft.Text(msg, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), bgcolor=color, open=True)
+        )
+        page.update()
 
     def create_glass_card(content_widget):
         return ft.Container(
             content=content_widget,
-            bgcolor=ft.colors.with_opacity(0.05, ft.colors.WHITE),
+            bgcolor=ft.Colors.WHITE10,
             border_radius=15,
             padding=20,
-            border=ft.border.all(1, ft.colors.with_opacity(0.1, ft.colors.WHITE)),
+            border=ft.Border.all(1, ft.Colors.WHITE24),
             blur=ft.Blur(10, 10, ft.BlurTileMode.MIRROR),
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment(0, 0),
         )
 
     # ----------------------------------------
-    # تبويب: توليد رمز QR
-    # ----------------------------------------
-    user_id_input = ft.TextField(
-        label="رقم المعرف",
-        border_color=ft.colors.BLUE_400,
-        width=250,
-        text_align=ft.TextAlign.CENTER
-    )
-    
-    qr_image = ft.Image(src=None, width=200, height=200, visible=False)
-    
-    def on_generate_click(e):
-        if not user_id_input.value:
-            user_id_input.error_text = "مطلوب"
-            page.update()
-            return
-        
-        user_id_input.error_text = None
-        img_b64 = generate_qr_base64(user_id_input.value)
-        qr_image.src_base64 = img_b64
-        qr_image.visible = True
-        page.update()
-
-    btn_generate = ft.ElevatedButton(
-        "إنشاء الرمز", 
-        on_click=on_generate_click,
-        style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=8),
-            bgcolor=ft.colors.BLUE_700,
-            color=ft.colors.WHITE
-        )
-    )
-
-    tab_generate_content = ft.Column(
-        controls=[
-            ft.Text("إصدار بطاقات QR", size=18, weight=ft.FontWeight.BOLD),
-            user_id_input,
-            btn_generate,
-            qr_image
-        ],
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        spacing=20
-    )
-
-    # ----------------------------------------
-    # تبويب: تسجيل الحضور
+    # 1. واجهة التحضير (Scan)
     # ----------------------------------------
     scanner_input = ft.TextField(
-        label="انتظار الفحص...",
-        border_color=ft.colors.TEAL_400,
+        label="رقم القيد (للمسح)",
+        border_color=ft.Colors.TEAL_400,
         width=250,
         text_align=ft.TextAlign.CENTER,
+        autofocus=True
     )
     
-    status_text = ft.Text("", size=14, text_align=ft.TextAlign.CENTER)
+    scan_result_text = ft.Text("في انتظار مسح البطاقة...", size=16, text_align=ft.TextAlign.CENTER)
 
     def on_scan_submit(e):
-        scanned_val = scanner_input.value.strip()
-        if not scanned_val:
-            return
-        
-        success = process_attendance(scanned_val)
-        
-        if success:
-            status_text.value = f"تم التسجيل: {scanned_val}"
-            status_text.color = ft.colors.GREEN_400
-        else:
-            status_text.value = "فشل التسجيل!"
-            status_text.color = ft.colors.RED_400
-            
+        student_id = scanner_input.value.strip()
         scanner_input.value = ""
         scanner_input.focus()
+
+        if not student_id:
+            return
+            
+        if not db_students:
+            scan_result_text.value = "يرجى تحديد مسار ملف الطلاب من الإدارة أولاً!"
+            scan_result_text.color = ft.Colors.AMBER_400
+        elif student_id in db_students:
+            student_name = db_students[student_id]
+            time_now = datetime.now().strftime("%I:%M %p")
+            
+            if any(record['id'] == student_id for record in db_attendance):
+                scan_result_text.value = f"الطالب {student_name} مُحضر مسبقاً!"
+                scan_result_text.color = ft.Colors.AMBER_400
+            else:
+                db_attendance.append({"id": student_id, "name": student_name, "time": time_now})
+                scan_result_text.value = f"تم تحضير: {student_name}\n({time_now})"
+                scan_result_text.color = ft.Colors.GREEN_400
+                refresh_attendance_list()
+        else:
+            scan_result_text.value = f"رقم القيد ({student_id}) غير مسجل بالنظام!"
+            scan_result_text.color = ft.Colors.RED_400
+            
         page.update()
 
     scanner_input.on_submit = on_scan_submit
 
-    tab_scan_content = ft.Column(
-        controls=[
-            ft.Text("تسجيل الحضور", size=18, weight=ft.FontWeight.BOLD),
-            scanner_input,
-            status_text
-        ],
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        spacing=20
+    view_scan = ft.Container(
+        content=create_glass_card(
+            ft.Column(
+                controls=[
+                    ft.Icon(ft.Icons.DOCUMENT_SCANNER, size=60, color=ft.Colors.TEAL_400),
+                    ft.Text("واجهة التحضير السريع", size=22, weight=ft.FontWeight.BOLD),
+                    ft.Divider(color=ft.Colors.TRANSPARENT),
+                    scanner_input,
+                    scan_result_text
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        ),
+        padding=20, alignment=ft.Alignment(0, -0.5)
     )
 
     # ----------------------------------------
-    # تجميع الواجهة في SafeArea للهواتف
+    # 2. واجهة سجل الحضور (Dashboard)
     # ----------------------------------------
-    tabs = ft.Tabs(
+    attendance_list_view = ft.ListView(expand=True, spacing=10, padding=10)
+
+    def refresh_attendance_list():
+        attendance_list_view.controls.clear()
+        if not db_attendance:
+            attendance_list_view.controls.append(
+                ft.Text("لا يوجد حضور حتى الآن.", text_align=ft.TextAlign.CENTER, color=ft.Colors.WHITE54)
+            )
+        for record in reversed(db_attendance): 
+            attendance_list_view.controls.append(
+                ft.Container(
+                    content=ft.ListTile(
+                        leading=ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400),
+                        title=ft.Text(record['name'], weight=ft.FontWeight.BOLD),
+                        subtitle=ft.Text(f"رقم القيد: {record['id']} | الوقت: {record['time']}"),
+                    ),
+                    bgcolor=ft.Colors.WHITE10,
+                    border_radius=10,
+                )
+            )
+        page.update()
+
+    view_dashboard = ft.Container(
+        content=ft.Column([
+            ft.Text("سجل الحضور اليومي", size=22, weight=ft.FontWeight.BOLD),
+            attendance_list_view
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+        padding=20
+    )
+
+    # ----------------------------------------
+    # 3. واجهة الإدارة (إدخال المسار يدوياً فقط لضمان الاستقرار)
+    # ----------------------------------------
+    stats_text = ft.Text("الطلاب المسجلين: 0", color=ft.Colors.WHITE70)
+
+    def update_admin_stats():
+        stats_text.value = f"الطلاب المسجلين: {len(db_students)}"
+        page.update()
+
+    def load_csv_data(file_path):
+        try:
+            with open(file_path, mode='r', encoding='utf-8-sig') as file:
+                reader = csv.reader(file)
+                db_students.clear()
+                next(reader, None) 
+                for row in reader:
+                    if len(row) >= 2:
+                        student_id, student_name = row[0].strip(), row[1].strip()
+                        db_students[student_id] = student_name
+            
+            show_snack_bar(f"تم تحميل {len(db_students)} طالب بنجاح!", ft.Colors.GREEN_400)
+            update_admin_stats()
+            
+        except FileNotFoundError:
+            show_snack_bar("الملف غير موجود في هذا المسار!", ft.Colors.RED_400)
+        except PermissionError:
+            show_snack_bar("النظام يرفض الصلاحية للوصول لهذا المسار!", ft.Colors.RED_400)
+        except Exception as ex:
+            show_snack_bar(f"خطأ في قراءة الملف: تأكد من صيغة CSV", ft.Colors.RED_400)
+
+    path_input = ft.TextField(
+        label="مسار ملف الطلاب",
+        hint_text="ألصق مسار الـ CSV هنا...",
+        border_color=ft.Colors.PURPLE_400,
+        width=250,
+        text_align=ft.TextAlign.LEFT
+    )
+
+    btn_sync = ft.IconButton(
+        icon=ft.Icons.SYNC,
+        icon_color=ft.Colors.WHITE,
+        bgcolor=ft.Colors.BLUE_700,
+        tooltip="قراءة المسار المكتوب",
+        on_click=lambda _: load_csv_data(path_input.value.strip()) if path_input.value else show_snack_bar("أدخل المسار أولاً", ft.Colors.RED_400)
+    )
+
+    row_file_selector = ft.Row(
+        controls=[path_input, btn_sync],
+        alignment=ft.MainAxisAlignment.CENTER,
+        spacing=10
+    )
+
+    gen_id_input = ft.TextField(label="رقم القيد", width=250, border_color=ft.Colors.BLUE_400)
+    qr_image = ft.Image(src="", width=150, height=150, visible=False)
+
+    def on_generate_click(e):
+        if gen_id_input.value:
+            qr_image.src_base64 = generate_qr_base64(gen_id_input.value.strip())
+            qr_image.visible = True
+            page.update()
+
+    btn_generate = ft.Container(
+        content=ft.Text("توليد بطاقة QR", weight=ft.FontWeight.BOLD),
+        bgcolor=ft.Colors.BLUE_700, padding=10, border_radius=8, width=150, alignment=ft.Alignment(0, 0),
+        on_click=on_generate_click, ink=True
+    )
+
+    view_admin = ft.Container(
+        content=ft.ListView(
+            controls=[
+                create_glass_card(
+                    ft.Column([
+                        ft.Text("إدارة قاعدة البيانات", size=18, weight=ft.FontWeight.BOLD),
+                        row_file_selector,
+                        stats_text,
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+                ),
+                ft.Container(height=20),
+                create_glass_card(
+                    ft.Column([
+                        ft.Text("إصدار بطاقات QR", size=18, weight=ft.FontWeight.BOLD),
+                        gen_id_input,
+                        btn_generate,
+                        qr_image
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+                ),
+            ]
+        ),
+        padding=20
+    )
+
+    # ----------------------------------------
+    # شريط التنقل السفلي 
+    # ----------------------------------------
+    views = [view_scan, view_dashboard, view_admin]
+    main_content = ft.Container(content=views[0], expand=True)
+
+    def on_nav_change(e):
+        main_content.content = views[e.control.selected_index]
+        if e.control.selected_index == 1:
+            refresh_attendance_list() 
+        page.update()
+
+    page.navigation_bar = ft.NavigationBar(
+        bgcolor=ft.Colors.WHITE10,
         selected_index=0,
-        animation_duration=300,
-        tabs=[
-            ft.Tab(
-                text="إنشاء",
-                icon=ft.icons.QR_CODE_2,
-                content=ft.Container(content=create_glass_card(tab_generate_content), padding=15)
-            ),
-            ft.Tab(
-                text="فحص",
-                icon=ft.icons.CAMERA_ALT,
-                content=ft.Container(content=create_glass_card(tab_scan_content), padding=15)
-            ),
-        ],
-        expand=1,
+        on_change=on_nav_change,
+        destinations=[
+            ft.NavigationBarDestination(icon=ft.Icons.QR_CODE_SCANNER, label="تحضير"),
+            ft.NavigationBarDestination(icon=ft.Icons.LIST_ALT, label="السجل"),
+            ft.NavigationBarDestination(icon=ft.Icons.ADMIN_PANEL_SETTINGS, label="الإدارة"),
+        ]
     )
 
-    # استخدام SafeArea لمنع تداخل الواجهة مع حواف الهاتف
-    page.add(ft.SafeArea(tabs, expand=True))
+    page.add(ft.SafeArea(main_content, expand=True))
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.run(main)
