@@ -2,8 +2,8 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ] # سيعمل تلقائياً عند الدفع لفرع main
-  workflow_dispatch: # يسمح لك بتشغيل البناء يدوياً من واجهة GitHub
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,10 +11,10 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -24,10 +24,10 @@ jobs:
           pip install flet qrcode pillow
 
       - name: Build APK with Flet
-        run: flet build apk src/main.py --project-name "QRAttendance" --org "com.omarkhalaqi.qr" --app-name "QR Attendance"
+        run: flet build apk src --project-name "QRAttendance" --org "com.omarkhalaqi.qr" --app-name "QR Attendance"
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: QRAttendance-APK
           path: build/apk/**/*.apk
