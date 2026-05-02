@@ -29,11 +29,17 @@ jobs:
         with:
           channel: 'stable'
 
-     - name: Install Python Dependencies
-        run: pip install -r src/requirements.txt
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flet
+          # تم تعديل المسار هنا للدخول إلى مجلد src
+          pip install -r src/requirements.txt
 
       - name: Build APK using Flet
-        run: flet build apk src
+        run: |
+          # نأمر flet ببناء المجلد src وتحويله إلى APK
+          flet build apk src
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
