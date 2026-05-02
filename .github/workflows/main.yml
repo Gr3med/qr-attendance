@@ -29,11 +29,11 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Install Python Dependencies
-        run: pip install -r requirements.txt
+     - name: Install Python Dependencies
+        run: pip install -r src/requirements.txt
 
       - name: Build APK using Flet
-        run: flet build apk
+        run: flet build apk src
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
