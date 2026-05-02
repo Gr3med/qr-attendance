@@ -9,40 +9,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: ⬆️ Upgrade pip + wheel
-        run: |
-          python -m pip install --upgrade pip wheel setuptools
-
-      # أدوات النظام اللازمة لو اضطُر للبناء
-      - name: 🛠 Install system libs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libjpeg-dev zlib1g-dev
-
-      # تثبيت Flutter (مطلوب لـ flet build)
-      - name: 🚀 Setup Flutter
+      - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: "3.22.0"
 
-      # تثبيت الحزم مع إجبار استخدام wheels جاهزة (تجنّب build من المصدر)
-      - name: 📦 Install deps (prefer wheels)
-        run: |
-          pip install flet
-          pip install --only-binary=:all: -r requirements.txt
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip setuptools wheel
 
-      # بناء APK
-      - name: 🔨 Build APK
-        run: flet build apk --verbose
+      - name: Install Flet
+        run: pip install flet
 
-      - name: 📤 Upload APK
+      - name: Build APK
+        run: flet build apk --clear-cache
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: qr-attendance-apk
