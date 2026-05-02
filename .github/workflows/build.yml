@@ -17,6 +17,12 @@ jobs:
         with:
           python-version: "3.11"
 
+      # ✅ تثبيت Flutter (هذا كان ناقص)
+      - name: 🚀 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.22.0"
+
       - name: 📦 Install dependencies
         run: |
           pip install flet
