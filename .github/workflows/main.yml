@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -13,40 +13,30 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # إعداد الجافا
-      - name: Setup Java JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      # إعداد Flutter
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-
-      # الخطوة الحاسمة: الموافقة التلقائية على تراخيص Android SDK
-      - name: Accept Android Licenses
-        run: yes | flutter doctor --android-licenses
-
-      # إعداد بايثون
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install flet qrcode pillow
+      - name: Setup Java (Required for Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
-      # بناء التطبيق مع تفعيل وضع التفاصيل (--verbose) لمعرفة كل ما يجري
-      - name: Build APK with Flet
-        run: flet build apk src --project "QRAttendance" --org "com.omarkhalaqi.qr" --product "QR Attendance" --verbose
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build APK using Flet
+        run: flet build apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QRAttendance-APK
-          path: '**/*.apk'
+          name: QR_Attendance_App
+          path: build/apk/**/*.apk
