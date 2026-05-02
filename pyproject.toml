@@ -5,16 +5,16 @@ dependencies = [
   "flet==0.84.0",
   "flet-camera",
   "opencv-python",
-  "numpy"
+  "numpy",
+  "openpyxl"
 ]
 
 [tool.flet]
 org = "com.yourname"
 product = "QR Attendance"
-permissions = ["camera"]
 
 [tool.flet.app]
 path = "src"
 
-[tool.flet.android]
-package = "com.yourname.qrattendance"
+[tool.flet.android.permission]
+"android.permission.CAMERA" = true
