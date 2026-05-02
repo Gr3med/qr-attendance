@@ -33,10 +33,13 @@ def main(page: ft.Page):
     page.padding = 0
     page.theme = ft.Theme(font_family="Segoe UI")
 
+    # الحل الكلاسيكي والمستقر 100% لجميع إصدارات Flet
     def show_snack_bar(msg, color):
-        page.overlay.append(
-            ft.SnackBar(content=ft.Text(msg, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), bgcolor=color, open=True)
+        page.snack_bar = ft.SnackBar(
+            content=ft.Text(msg, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
+            bgcolor=color
         )
+        page.snack_bar.open = True
         page.update()
 
     def create_glass_card(content_widget):
@@ -55,7 +58,6 @@ def main(page: ft.Page):
     # ----------------------------------------
     scan_result_text = ft.Text("اضغط على الزر أدناه لفتح الكاميرا ومسح البطاقة", size=14, text_align=ft.TextAlign.CENTER, color=ft.Colors.WHITE54)
 
-    # المنطق البرمجي لمعالجة رقم القيد بعد استخراجه من الصورة
     def process_scanned_id(student_id):
         student_id = student_id.strip()
         if not db_students:
@@ -78,10 +80,11 @@ def main(page: ft.Page):
             scan_result_text.color = ft.Colors.RED_400
         page.update()
 
-    # دالة قراءة الـ QR من الصورة باستخدام OpenCV
-    async def on_qr_image_picked(e: ft.FilePickerResultEvent):
-        if e.files and len(e.files) > 0:
-            img_path = e.files[0].path
+    async def open_camera_click(e):
+        files = await ft.FilePicker().pick_files(allowed_extensions=["png", "jpg", "jpeg"])
+        
+        if files and len(files) > 0:
+            img_path = files[0].path
             try:
                 img = cv2.imread(img_path)
                 detector = cv2.QRCodeDetector()
@@ -93,16 +96,6 @@ def main(page: ft.Page):
                     show_snack_bar("لم يتم التعرف على الـ QR، حاول التقاط صورة أوضح.", ft.Colors.RED_400)
             except Exception as ex:
                 show_snack_bar("خطأ في معالجة الصورة.", ft.Colors.RED_400)
-
-    # إعداد منتقي الملفات الخاص بالكاميرا
-    qr_picker = ft.FilePicker()
-    qr_picker.on_result = on_qr_image_picked
-    page.overlay.append(qr_picker)
-    page.update()
-
-    async def open_camera_click(e):
-        # في الهاتف، سيطلب هذا الأمر من النظام فتح الكاميرا أو المعرض لاختيار صورة
-        await qr_picker.pick_files(allowed_extensions=["png", "jpg", "jpeg"])
 
     btn_scan = ft.Container(
         content=ft.Row([ft.Icon(ft.Icons.CAMERA_ALT, size=24, color=ft.Colors.WHITE), ft.Text("التقاط صورة للبطاقة (Scan)", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
@@ -188,8 +181,10 @@ def main(page: ft.Page):
             
         except FileNotFoundError:
             show_snack_bar("الملف غير موجود في هذا المسار!", ft.Colors.RED_400)
+        except PermissionError:
+            show_snack_bar("النظام يرفض الصلاحية للوصول لهذا المسار!", ft.Colors.RED_400)
         except Exception as ex:
-            show_snack_bar(f"خطأ في قراءة الملف: تأكد من الصلاحيات", ft.Colors.RED_400)
+            show_snack_bar(f"خطأ في قراءة الملف: تأكد من صيغة CSV", ft.Colors.RED_400)
 
     path_input = ft.TextField(
         label="مسار ملف الطلاب",
