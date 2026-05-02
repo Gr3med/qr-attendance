@@ -18,6 +18,7 @@ path = "src"
 
 [tool.flet.android]
 package = "com.qr.attendance"
+split_per_abi = true
 
 [tool.flet.android.permission]
 "android.permission.CAMERA" = true
