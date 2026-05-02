@@ -2,6 +2,7 @@ import flet as ft
 import qrcode
 import base64
 import csv
+import cv2  # مكتبة الرؤية الحاسوبية لقراءة الـ QR
 from io import BytesIO
 from datetime import datetime
 
@@ -50,26 +51,13 @@ def main(page: ft.Page):
         )
 
     # ----------------------------------------
-    # 1. واجهة التحضير (Scan)
+    # 1. واجهة التحضير (فتح الكاميرا والمسح)
     # ----------------------------------------
-    scanner_input = ft.TextField(
-        label="رقم القيد (للمسح)",
-        border_color=ft.Colors.TEAL_400,
-        width=250,
-        text_align=ft.TextAlign.CENTER,
-        autofocus=True
-    )
-    
-    scan_result_text = ft.Text("في انتظار مسح البطاقة...", size=16, text_align=ft.TextAlign.CENTER)
+    scan_result_text = ft.Text("اضغط على الزر أدناه لفتح الكاميرا ومسح البطاقة", size=14, text_align=ft.TextAlign.CENTER, color=ft.Colors.WHITE54)
 
-    def on_scan_submit(e):
-        student_id = scanner_input.value.strip()
-        scanner_input.value = ""
-        scanner_input.focus()
-
-        if not student_id:
-            return
-            
+    # المنطق البرمجي لمعالجة رقم القيد بعد استخراجه من الصورة
+    def process_scanned_id(student_id):
+        student_id = student_id.strip()
         if not db_students:
             scan_result_text.value = "يرجى تحديد مسار ملف الطلاب من الإدارة أولاً!"
             scan_result_text.color = ft.Colors.AMBER_400
@@ -88,19 +76,52 @@ def main(page: ft.Page):
         else:
             scan_result_text.value = f"رقم القيد ({student_id}) غير مسجل بالنظام!"
             scan_result_text.color = ft.Colors.RED_400
-            
         page.update()
 
-    scanner_input.on_submit = on_scan_submit
+    # دالة قراءة الـ QR من الصورة باستخدام OpenCV
+    async def on_qr_image_picked(e: ft.FilePickerResultEvent):
+        if e.files and len(e.files) > 0:
+            img_path = e.files[0].path
+            try:
+                img = cv2.imread(img_path)
+                detector = cv2.QRCodeDetector()
+                data, bbox, _ = detector.detectAndDecode(img)
+                
+                if data:
+                    process_scanned_id(data)
+                else:
+                    show_snack_bar("لم يتم التعرف على الـ QR، حاول التقاط صورة أوضح.", ft.Colors.RED_400)
+            except Exception as ex:
+                show_snack_bar("خطأ في معالجة الصورة.", ft.Colors.RED_400)
+
+    # إعداد منتقي الملفات الخاص بالكاميرا
+    qr_picker = ft.FilePicker()
+    qr_picker.on_result = on_qr_image_picked
+    page.overlay.append(qr_picker)
+    page.update()
+
+    async def open_camera_click(e):
+        # في الهاتف، سيطلب هذا الأمر من النظام فتح الكاميرا أو المعرض لاختيار صورة
+        await qr_picker.pick_files(allowed_extensions=["png", "jpg", "jpeg"])
+
+    btn_scan = ft.Container(
+        content=ft.Row([ft.Icon(ft.Icons.CAMERA_ALT, size=24, color=ft.Colors.WHITE), ft.Text("التقاط صورة للبطاقة (Scan)", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
+        bgcolor=ft.Colors.TEAL_600,
+        padding=15,
+        border_radius=10,
+        on_click=open_camera_click,
+        ink=True
+    )
 
     view_scan = ft.Container(
         content=create_glass_card(
             ft.Column(
                 controls=[
-                    ft.Icon(ft.Icons.DOCUMENT_SCANNER, size=60, color=ft.Colors.TEAL_400),
-                    ft.Text("واجهة التحضير السريع", size=22, weight=ft.FontWeight.BOLD),
+                    ft.Icon(ft.Icons.QR_CODE_SCANNER, size=60, color=ft.Colors.TEAL_400),
+                    ft.Text("نظام التحضير بالكاميرا", size=22, weight=ft.FontWeight.BOLD),
                     ft.Divider(color=ft.Colors.TRANSPARENT),
-                    scanner_input,
+                    btn_scan,
+                    ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
                     scan_result_text
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -143,7 +164,7 @@ def main(page: ft.Page):
     )
 
     # ----------------------------------------
-    # 3. واجهة الإدارة (إدخال المسار يدوياً فقط لضمان الاستقرار)
+    # 3. واجهة الإدارة (إدخال المسار يدوياً لضمان الاستقرار)
     # ----------------------------------------
     stats_text = ft.Text("الطلاب المسجلين: 0", color=ft.Colors.WHITE70)
 
@@ -167,10 +188,8 @@ def main(page: ft.Page):
             
         except FileNotFoundError:
             show_snack_bar("الملف غير موجود في هذا المسار!", ft.Colors.RED_400)
-        except PermissionError:
-            show_snack_bar("النظام يرفض الصلاحية للوصول لهذا المسار!", ft.Colors.RED_400)
         except Exception as ex:
-            show_snack_bar(f"خطأ في قراءة الملف: تأكد من صيغة CSV", ft.Colors.RED_400)
+            show_snack_bar(f"خطأ في قراءة الملف: تأكد من الصلاحيات", ft.Colors.RED_400)
 
     path_input = ft.TextField(
         label="مسار ملف الطلاب",
