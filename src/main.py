@@ -76,7 +76,7 @@ def main(page: ft.Page):
                 scan_result_text.color = ft.Colors.RED_400
             page.update()
 
-        def on_qr_image_picked(e: ft.FilePickerResultEvent):
+        def on_qr_image_picked(e):
             if e.files and len(e.files) > 0:
                 img_path = e.files[0].path
                 scan_result_text.value = "جاري المعالجة السحابية للصورة..."
