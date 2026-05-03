@@ -1,4 +1,3 @@
 flet
 qrcode
-pillow
-pyzbar
+requests
