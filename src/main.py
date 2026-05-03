@@ -97,9 +97,10 @@ def main(page: ft.Page):
                 show_snack_bar("خطأ في معالجة الصورة.", ft.Colors.RED_400)
 
     # أداة اختيار الملفات/الكاميرا
-    qr_picker = ft.FilePicker(on_result=on_qr_image_picked)
+# أداة اختيار الملفات/الكاميرا
+    qr_picker = ft.FilePicker()
+    qr_picker.on_result = on_qr_image_picked
     page.overlay.append(qr_picker)
-    page.update()
 
     btn_scan = ft.Container(
         content=ft.Row([ft.Icon(ft.Icons.CAMERA_ALT, size=24, color=ft.Colors.WHITE), ft.Text("التقاط صورة للبطاقة (Scan)", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
