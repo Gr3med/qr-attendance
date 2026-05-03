@@ -2,9 +2,10 @@ import flet as ft
 import qrcode
 import base64
 import csv
-import cv2  # مكتبة الرؤية الحاسوبية لقراءة الـ QR
 from io import BytesIO
 from datetime import datetime
+from PIL import Image
+from pyzbar.pyzbar import decode
 
 # ==========================================
 # منطقة قواعد البيانات والمنطق البرمجي
@@ -33,7 +34,7 @@ def main(page: ft.Page):
     page.padding = 0
     page.theme = ft.Theme(font_family="Segoe UI")
 
-    # الحل الكلاسيكي والمستقر 100% لجميع إصدارات Flet
+    # نظام الإشعارات المستقر 100%
     def show_snack_bar(msg, color):
         page.snack_bar = ft.SnackBar(
             content=ft.Text(msg, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
@@ -80,29 +81,32 @@ def main(page: ft.Page):
             scan_result_text.color = ft.Colors.RED_400
         page.update()
 
-    async def open_camera_click(e):
-        files = await ft.FilePicker().pick_files(allowed_extensions=["png", "jpg", "jpeg"])
-        
-        if files and len(files) > 0:
-            img_path = files[0].path
+    # دالة قراءة الـ QR عبر pyzbar
+    def on_qr_image_picked(e: ft.FilePickerResultEvent):
+        if e.files and len(e.files) > 0:
+            img_path = e.files[0].path
             try:
-                img = cv2.imread(img_path)
-                detector = cv2.QRCodeDetector()
-                data, bbox, _ = detector.detectAndDecode(img)
-                
-                if data:
-                    process_scanned_id(data)
+                img = Image.open(img_path)
+                decoded_objects = decode(img)
+                if decoded_objects:
+                    qr_data = decoded_objects[0].data.decode('utf-8')
+                    process_scanned_id(qr_data)
                 else:
                     show_snack_bar("لم يتم التعرف على الـ QR، حاول التقاط صورة أوضح.", ft.Colors.RED_400)
             except Exception as ex:
                 show_snack_bar("خطأ في معالجة الصورة.", ft.Colors.RED_400)
+
+    # أداة اختيار الملفات/الكاميرا
+    qr_picker = ft.FilePicker(on_result=on_qr_image_picked)
+    page.overlay.append(qr_picker)
+    page.update()
 
     btn_scan = ft.Container(
         content=ft.Row([ft.Icon(ft.Icons.CAMERA_ALT, size=24, color=ft.Colors.WHITE), ft.Text("التقاط صورة للبطاقة (Scan)", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
         bgcolor=ft.Colors.TEAL_600,
         padding=15,
         border_radius=10,
-        on_click=open_camera_click,
+        on_click=lambda _: qr_picker.pick_files(allowed_extensions=["png", "jpg", "jpeg"]),
         ink=True
     )
 
@@ -157,7 +161,7 @@ def main(page: ft.Page):
     )
 
     # ----------------------------------------
-    # 3. واجهة الإدارة (إدخال المسار يدوياً لضمان الاستقرار)
+    # 3. واجهة الإدارة 
     # ----------------------------------------
     stats_text = ft.Text("الطلاب المسجلين: 0", color=ft.Colors.WHITE70)
 
