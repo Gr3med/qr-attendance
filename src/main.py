@@ -2,10 +2,9 @@ import flet as ft
 import qrcode
 import base64
 import csv
+import requests
 from io import BytesIO
 from datetime import datetime
-from PIL import Image
-from pyzbar.pyzbar import decode
 
 # ==========================================
 # منطقة قواعد البيانات والمنطق البرمجي
@@ -34,7 +33,6 @@ def main(page: ft.Page):
     page.padding = 0
     page.theme = ft.Theme(font_family="Segoe UI")
 
-    # نظام الإشعارات المستقر 100%
     def show_snack_bar(msg, color):
         page.snack_bar = ft.SnackBar(
             content=ft.Text(msg, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
@@ -55,7 +53,7 @@ def main(page: ft.Page):
         )
 
     # ----------------------------------------
-    # 1. واجهة التحضير (فتح الكاميرا والمسح)
+    # 1. واجهة التحضير (فتح الكاميرا والمعالجة السحابية)
     # ----------------------------------------
     scan_result_text = ft.Text("اضغط على الزر أدناه لفتح الكاميرا ومسح البطاقة", size=14, text_align=ft.TextAlign.CENTER, color=ft.Colors.WHITE54)
 
@@ -81,26 +79,41 @@ def main(page: ft.Page):
             scan_result_text.color = ft.Colors.RED_400
         page.update()
 
-    # دالة قراءة الـ QR عبر pyzbar
+    # دالة قراءة الـ QR عبر API السحابي لتجاوز قيود الأندرويد
     def on_qr_image_picked(e: ft.FilePickerResultEvent):
         if e.files and len(e.files) > 0:
             img_path = e.files[0].path
+            scan_result_text.value = "جاري المعالجة السحابية للصورة..."
+            scan_result_text.color = ft.Colors.BLUE_400
+            page.update()
+            
             try:
-                img = Image.open(img_path)
-                decoded_objects = decode(img)
-                if decoded_objects:
-                    qr_data = decoded_objects[0].data.decode('utf-8')
-                    process_scanned_id(qr_data)
+                # إرسال الصورة للـ API المخصص لقراءة الباركود
+                with open(img_path, 'rb') as f:
+                    response = requests.post('https://api.qrserver.com/v1/read-qr-code/', files={'file': f}, timeout=10)
+                    
+                if response.status_code == 200:
+                    result = response.json()
+                    qr_data = result[0]['symbol'][0]['data']
+                    
+                    if qr_data:
+                        process_scanned_id(qr_data)
+                    else:
+                        scan_result_text.value = "لم يتم التعرف على الـ QR، التقط صورة أوضح."
+                        scan_result_text.color = ft.Colors.AMBER_400
                 else:
-                    show_snack_bar("لم يتم التعرف على الـ QR، حاول التقاط صورة أوضح.", ft.Colors.RED_400)
+                    scan_result_text.value = "فشل الاتصال بخادم المعالجة."
+                    scan_result_text.color = ft.Colors.RED_400
             except Exception as ex:
-                show_snack_bar("خطأ في معالجة الصورة.", ft.Colors.RED_400)
+                scan_result_text.value = "يرجى التأكد من اتصال الهاتف بالإنترنت."
+                scan_result_text.color = ft.Colors.RED_400
+            
+            page.update()
 
-    # أداة اختيار الملفات/الكاميرا
-# أداة اختيار الملفات/الكاميرا
     qr_picker = ft.FilePicker()
     qr_picker.on_result = on_qr_image_picked
     page.overlay.append(qr_picker)
+    page.update()
 
     btn_scan = ft.Container(
         content=ft.Row([ft.Icon(ft.Icons.CAMERA_ALT, size=24, color=ft.Colors.WHITE), ft.Text("التقاط صورة للبطاقة (Scan)", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
@@ -116,7 +129,7 @@ def main(page: ft.Page):
             ft.Column(
                 controls=[
                     ft.Icon(ft.Icons.QR_CODE_SCANNER, size=60, color=ft.Colors.TEAL_400),
-                    ft.Text("نظام التحضير بالكاميرا", size=22, weight=ft.FontWeight.BOLD),
+                    ft.Text("نظام التحضير السحابي", size=22, weight=ft.FontWeight.BOLD),
                     ft.Divider(color=ft.Colors.TRANSPARENT),
                     btn_scan,
                     ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
